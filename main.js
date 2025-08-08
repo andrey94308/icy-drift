@@ -67,6 +67,9 @@
 
   const hudScore = document.getElementById('score');
   const hudMessage = document.getElementById('message');
+  const hudGameOver = document.getElementById('gameover');
+  const hudGoScore = document.getElementById('go-score');
+  const hudGoRestart = document.getElementById('go-restart');
 
   // Track definition: two ice lines creating a narrow seam to pass through
   // We'll procedurally generate two noisy sine-like curves offset in Y, scrolling right-to-left
@@ -121,6 +124,7 @@
     car.targetAngle = car.angle;
 
     hudMessage.style.opacity = 1;
+    hideGameOver();
     updateMeters();
   }
 
@@ -292,7 +296,7 @@
         start(e.clientX);
       } else if (!state.running && state.meters > 0) {
         // restart after crash
-        reset();
+        reset(); hideGameOver();
         // immediately start steering on this side
         start(e.clientX);
       } else {
@@ -306,17 +310,23 @@
     // Keyboard fallback: Up/Down arrows or W/S
     window.addEventListener('keydown', e => {
       if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft') {
-        if (!state.running && state.meters > 0) reset();
+        if (!state.running && state.meters > 0) { reset(); hideGameOver(); }
         state.steerDir = -1; state.running = true; hudMessage.style.opacity = 0;
       }
       if (e.code === 'ArrowDown' || e.code === 'KeyS' || e.code === 'ArrowRight') {
-        if (!state.running && state.meters > 0) reset();
+        if (!state.running && state.meters > 0) { reset(); hideGameOver(); }
         state.steerDir = 1; state.running = true; hudMessage.style.opacity = 0;
       }
     });
     window.addEventListener('keyup', e => {
       if (['ArrowUp','KeyW','ArrowDown','KeyS','ArrowLeft','ArrowRight'].includes(e.code)) state.steerDir = 0;
     });
+    if (hudGoRestart) {
+      hudGoRestart.addEventListener('click', () => {
+        reset(); hideGameOver();
+        state.running = false; // wait for input
+      });
+    }
   }
   setInputHandlers();
 
@@ -406,14 +416,20 @@
     const region = findCurrentRegion(worldX);
     const tolerance = 10;
     if (!region) {
-      if (state.running) { state.best = Math.max(state.best, state.meters); flashLose(); }
-      reset();
+      if (state.running) {
+        state.best = Math.max(state.best, state.meters);
+        state.running = false;
+        flashLose();
+      }
       return;
     }
     const gapHeightForScore = region.data.yBotRect - region.data.yTopRect;
     if (car.y < region.data.yTopRect - tolerance || car.y > region.data.yBotRect + tolerance) {
-      if (state.running) { state.best = Math.max(state.best, state.meters); flashLose(); }
-      reset();
+      if (state.running) {
+        state.best = Math.max(state.best, state.meters);
+        state.running = false;
+        flashLose();
+      }
       return;
     }
 
@@ -434,10 +450,16 @@
     return null;
   }
 
-  function flashLose() {
-    hudMessage.innerHTML = `You fell in! Best: ${Math.floor(state.best)}<br/>Tap left/right to try again`;
-    hudMessage.style.opacity = 1;
-    setTimeout(() => { hudMessage.style.opacity = 1; }, 0);
+  function flashLose() { showGameOver(); }
+
+  function showGameOver() {
+    if (!hudGameOver) return;
+    hudGoScore.textContent = `Score: ${Math.floor(state.meters)} m`;
+    hudGameOver.setAttribute('aria-hidden', 'false');
+  }
+  function hideGameOver() {
+    if (!hudGameOver) return;
+    hudGameOver.setAttribute('aria-hidden', 'true');
   }
 
   function render() {
