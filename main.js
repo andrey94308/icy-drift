@@ -21,18 +21,18 @@
     speedAccelPxPerSec2: 18,
     baseSpeedPxPerSec: 220,
     steering: {
-      baseSteerStrength: 1.2,     // rad/s at base speed
+      baseSteerStrength: 1,     // rad/s at base speed
       steerStrengthPer100Px: 0.2, // +rad/s per +100 px/s speed
-      baseResponse: 8.0,          // nose rotation response at base speed
-      responsePer100Px: 0.5,      // + per +100 px/s
+      baseResponse: 4.0,          // nose rotation response at base speed
+      responsePer100Px: 0.35,      // + per +100 px/s
       maxSteerStrength: 4.0,
-      maxResponse: 12.0,
+      maxResponse: 10.0,
     },
     drift: {
       longFrictionPerSec: 0.5,   // lower damping along heading
-      latFrictionPerSec: 5.5,    // higher damping sideways, car stops sliding sooner
+      latFrictionPerSec: 0.5,    // higher damping sideways, car stops sliding sooner
       forwardGlide: 40,          // small persistent push forward
-      alignGripPerSec: 4.2,      // how fast velocity aligns toward nose
+      alignGripPerSec: 25,      // how fast velocity aligns toward nose
       alignGripPer100Px: 1.1,    // extra grip as speed grows (per +100 px/s)
       extraGripWhenSteering: 0.6, // +60% grip while steering
       maxAlignGrip: 10.0,
