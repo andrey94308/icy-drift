@@ -87,6 +87,40 @@ html, body {
 }
 #gameover button:active { transform: translateY(1px); }
 
+/* Start hint halves */
+#start-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.06);
+}
+#start-hint[aria-hidden="true"] { display: none; }
+#start-hint .half {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #eaf6ff;
+}
+#start-hint .half::before {
+  content: "";
+  position: absolute;
+  inset: 8% 6%; /* top/bottom, left/right */
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.28); /* translucent dark filter */
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+#start-hint .half .arrow, #start-hint .half .label { position: relative; z-index: 1; }
+#start-hint .left { background: transparent; }
+#start-hint .right { background: transparent; }
+#start-hint .arrow { font-size: 42px; line-height: 1; opacity: 0.95; }
+#start-hint .label { font-size: 14px; margin-top: 6px; opacity: 0.9; }
+
 /* Debug: left/right half guidance (hidden by default) */
 .halves::before, .halves::after {
   content: "";

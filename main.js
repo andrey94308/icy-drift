@@ -70,6 +70,7 @@
   const hudGameOver = document.getElementById('gameover');
   const hudGoScore = document.getElementById('go-score');
   const hudGoRestart = document.getElementById('go-restart');
+  const hudStartHint = document.getElementById('start-hint');
 
   // Track definition: two ice lines creating a narrow seam to pass through
   // We'll procedurally generate two noisy sine-like curves offset in Y, scrolling right-to-left
@@ -125,6 +126,7 @@
 
     hudMessage.style.opacity = 1;
     hideGameOver();
+    if (hudStartHint) hudStartHint.setAttribute('aria-hidden','false');
     updateMeters();
   }
 
@@ -284,6 +286,7 @@
       active = true;
       state.running = true;
       hudMessage.style.opacity = 0;
+      if (hudStartHint) hudStartHint.setAttribute('aria-hidden','true');
       state.steerDir = (x < vw/2) ? -1 : 1;
     }
     function move(x) { if (active) state.steerDir = (x < vw/2) ? -1 : 1; }
@@ -311,11 +314,11 @@
     window.addEventListener('keydown', e => {
       if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft') {
         if (!state.running && state.meters > 0) { reset(); hideGameOver(); }
-        state.steerDir = -1; state.running = true; hudMessage.style.opacity = 0;
+        state.steerDir = -1; state.running = true; hudMessage.style.opacity = 0; if (hudStartHint) hudStartHint.setAttribute('aria-hidden','true');
       }
       if (e.code === 'ArrowDown' || e.code === 'KeyS' || e.code === 'ArrowRight') {
         if (!state.running && state.meters > 0) { reset(); hideGameOver(); }
-        state.steerDir = 1; state.running = true; hudMessage.style.opacity = 0;
+        state.steerDir = 1; state.running = true; hudMessage.style.opacity = 0; if (hudStartHint) hudStartHint.setAttribute('aria-hidden','true');
       }
     });
     window.addEventListener('keyup', e => {
@@ -456,6 +459,7 @@
     if (!hudGameOver) return;
     hudGoScore.textContent = `Score: ${Math.floor(state.meters)} m`;
     hudGameOver.setAttribute('aria-hidden', 'false');
+    if (hudStartHint) hudStartHint.setAttribute('aria-hidden','true');
   }
   function hideGameOver() {
     if (!hudGameOver) return;
