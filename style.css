@@ -110,7 +110,7 @@ html, body {
 #start-hint .half::before {
   content: "";
   position: absolute;
-  inset: 8% 6%; /* top/bottom, left/right */
+  inset: 2% 2%; /* top/bottom, left/right */
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.28); /* translucent dark filter */
   box-shadow: 0 8px 24px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.08);
