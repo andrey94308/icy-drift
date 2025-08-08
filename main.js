@@ -1,0 +1,583 @@
+/* Icy Drift: Flappy-like with car drifting between ice seams */
+
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  // Assets
+  const floeImg = new Image();
+  floeImg.src = 'floe.png';
+  let floeImgReady = false;
+  floeImg.onload = () => { floeImgReady = true; };
+
+  const carImg = new Image();
+  carImg.src = 'car.png';
+  let carImgReady = false;
+  carImg.onload = () => { carImgReady = true; };
+
+  // Tunables
+  const CONFIG = {
+    // Forward scroll acceleration (px/s^2). Increase to make game ramp up faster.
+    speedAccelPxPerSec2: 18,
+    baseSpeedPxPerSec: 220,
+    steering: {
+      baseSteerStrength: 1.2,     // rad/s at base speed
+      steerStrengthPer100Px: 0.2, // +rad/s per +100 px/s speed
+      baseResponse: 8.0,          // nose rotation response at base speed
+      responsePer100Px: 0.5,      // + per +100 px/s
+      maxSteerStrength: 4.0,
+      maxResponse: 12.0,
+    },
+    drift: {
+      longFrictionPerSec: 0.5,   // lower damping along heading
+      latFrictionPerSec: 5.5,    // higher damping sideways, car stops sliding sooner
+      forwardGlide: 40,          // small persistent push forward
+      alignGripPerSec: 4.2,      // how fast velocity aligns toward nose
+      alignGripPer100Px: 1.1,    // extra grip as speed grows (per +100 px/s)
+      extraGripWhenSteering: 0.6, // +60% grip while steering
+      maxAlignGrip: 10.0,
+    },
+    // Floe sprite padding crop (per-side). If your sprite has ~20% padding, set 0.2
+    floeSpritePaddingRatio: -0.01,
+  };
+
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  let vw = 0, vh = 0;
+  function resize() {
+    vw = Math.floor(window.innerWidth);
+    vh = Math.floor(window.innerHeight);
+    canvas.width = Math.floor(vw * DPR);
+    canvas.height = Math.floor(vh * DPR);
+    canvas.style.width = vw + 'px';
+    canvas.style.height = vh + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Game state
+  const state = {
+    running: false,
+    time: 0,
+    meters: 0,
+    best: 0,
+    // Inputs
+    steerDir: 0, // -1 up (left half), +1 down (right half)
+  };
+
+  const hudScore = document.getElementById('score');
+  const hudMessage = document.getElementById('message');
+
+  // Track definition: two ice lines creating a narrow seam to pass through
+  // We'll procedurally generate two noisy sine-like curves offset in Y, scrolling right-to-left
+  const track = {
+    segments: [], // array of points x,yTop,yBot
+    scrollX: 0,
+    speed: 220, // px/s horizontal movement to the left
+    gap: 200,  // nominal gap between top and bottom ice at car X (wider lane)
+    variance: 80, // amplitude variance
+    freq: 0.0022, // x→time scale for band noise
+    roughness: 0.25, // noise blend
+    // Rectangular floes tiling along X with long lengths
+    floes: [], // { startX, endX, yTopRect, yBotRect }
+    nextFloeX: 0,
+    floeHeightFactor: 0.7, // target fraction of band height/gap
+    floeHeightJitter: 0.25, // ± jitter (25%)
+  };
+
+  // Car physics: drifting on ice. We'll simulate heading vs velocity angle with lateral slip.
+  const car = {
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    angle: 0, // 0 rad points to the right (forward)
+    targetAngle: 0,
+    width: 46,
+    length: 78,
+    color: '#9fe3ff',
+  };
+
+  function reset() {
+    state.running = false;
+    state.time = 0;
+    state.meters = 0;
+    state.steerDir = 0;
+
+    track.scrollX = 0;
+    track.segments = [];
+    track.speed = 220; // reset to base speed
+    seedTrack();
+    // reset floes and pre-generate so they are visible before first click
+    track.floes = [];
+    track.nextFloeX = 0;
+    extendFloes();
+
+    car.x = vw * 0.35;
+    car.y = vh * 0.5;
+    car.vx = 120;
+    car.vy = 0;
+    car.angle = 0;
+    car.targetAngle = car.angle;
+
+    hudMessage.style.opacity = 1;
+    updateMeters();
+  }
+
+  function updateMeters() {
+    hudScore.textContent = `${Math.floor(state.meters)} m`;
+  }
+
+  // Simple 1D value noise
+  function makeNoise1D(seed) {
+    let s = seed >>> 0;
+    function rand() {
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+      return (s >>> 0) / 4294967296;
+    }
+    const gradients = new Array(2048).fill(0).map(() => rand()*2-1);
+    return function noise(x) {
+      const xi = Math.floor(x);
+      const xf = x - xi;
+      const g0 = gradients[(xi) & 2047];
+      const g1 = gradients[(xi+1) & 2047];
+      const u = xf*xf*(3-2*xf);
+      return (1-u)*g0*xf + u*g1*(xf-1);
+    }
+  }
+  const noise = makeNoise1D(1337);
+  function makeRng(seed) {
+    let s = seed >>> 0;
+    return {
+      next() { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return s >>> 0; },
+      float() { return (this.next()) / 4294967296; },
+      range(a,b){ return a + (b-a)*this.float(); }
+    }
+  }
+  const rng = makeRng(424242);
+
+  function seedTrack() {
+    const step = 18;
+    const buffer = vw + 300;
+    for (let x = 0; x <= buffer; x += step) {
+      const t = x * track.freq;
+      // Use noise-only band so no visible sine centerline
+      const base = noise(t*2.7) * track.variance;
+      const centerY = vh*0.5 + base;
+      const gap = track.gap + noise(t*1.7+200)*40;
+      track.segments.push({ x, yTop: centerY - gap*0.5, yBot: centerY + gap*0.5 });
+    }
+  }
+
+  function extendTrack() {
+    // ensure we have world points up to scrollX + vw + 300
+    const step = 18;
+    const needUntil = track.scrollX + vw + 300;
+    const last = track.segments.length ? track.segments[track.segments.length-1].x : 0;
+    for (let x = last + step; x <= needUntil; x += step) {
+      const t = x * track.freq;
+      const base = noise(t*2.7) * track.variance;
+      const centerY = vh*0.5 + base;
+      const gap = track.gap + noise(t*1.7+200)*40;
+      track.segments.push({ x, yTop: centerY - gap*0.5, yBot: centerY + gap*0.5 });
+    }
+    // drop off-screen left (when drawn x = worldX - scrollX < -60)
+    while (track.segments.length && track.segments[1] && track.segments[1].x - track.scrollX < -60) {
+      track.segments.shift();
+    }
+    extendFloes();
+  }
+
+  function extendFloes() {
+    // Ensure continuous tiling of long rectangular floes with no gaps
+    const viewEnd = track.scrollX + vw + 300;
+    if (track.floes.length === 0) {
+      track.nextFloeX = track.segments.length ? track.segments[0].x : track.scrollX;
+    } else {
+      track.nextFloeX = Math.max(track.nextFloeX, track.floes[track.floes.length - 1].endX);
+    }
+    while (track.nextFloeX < viewEnd) {
+      const len = rng.range(140, 260); // shorter floes
+      const startX = track.nextFloeX;
+      const endX = startX + len;
+      const env = sampleBandEnvelope(startX, endX);
+      const bandHeight = Math.max(30, env.yBot - env.yTop);
+
+      const prev = track.floes[track.floes.length - 1] || null;
+      const targetOverlap = car.width + 12; // slightly above car width
+      const overlapTolerance = 3; // allow small slack
+
+      // Fixed-like height with small jitter
+      const baseHeight = Math.min(track.gap, bandHeight) * track.floeHeightFactor;
+      const jitter = (rng.float()*2 - 1) * track.floeHeightJitter * baseHeight;
+      const chosenHeight = clamp(baseHeight + jitter, baseHeight*(1 - track.floeHeightJitter), baseHeight*(1 + track.floeHeightJitter));
+
+      // Compute final center by shifting up/down to achieve desired overlap, without changing height
+      let center;
+      const minCenter = env.yTop + chosenHeight * 0.5;
+      const maxCenter = env.yBot - chosenHeight * 0.5;
+      if (!prev) {
+        center = (minCenter + maxCenter) * 0.5;
+      } else {
+        const prevCenter = (prev.yTopRect + prev.yBotRect) * 0.5;
+        const prevHeight = prev.yBotRect - prev.yTopRect;
+        const reqDistance = (prevHeight + chosenHeight) * 0.5 - targetOverlap; // how far centers must be apart
+        const roomDown = Math.abs(prevCenter - minCenter);
+        const roomUp = Math.abs(maxCenter - prevCenter);
+        let dir = (rng.float() < 0.5) ? -1 : 1; // -1 up, +1 down relative to screen
+        // If random direction lacks room, flip
+        let maxRoom = dir < 0 ? roomDown : roomUp;
+        if (maxRoom < reqDistance - overlapTolerance) dir = (roomUp > roomDown) ? 1 : -1;
+        maxRoom = dir < 0 ? roomDown : roomUp;
+        // Distance we can actually move
+        const dist = clamp(reqDistance, 0, maxRoom);
+        center = prevCenter + (dir < 0 ? -dist : dist);
+        center = clamp(center, minCenter, maxCenter);
+      }
+
+      const yTopRect = center - chosenHeight * 0.5;
+      const yBotRect = center + chosenHeight * 0.5;
+      track.floes.push({ startX, endX, yTopRect, yBotRect });
+      track.nextFloeX = endX; // back-to-back
+    }
+    // Drop floes that are fully left of view
+    while (track.floes.length && track.floes[0].endX < track.scrollX - 200) {
+      track.floes.shift();
+    }
+  }
+
+  function sampleBandEnvelope(startX, endX) {
+    // Sample the band top/bot across [startX, endX] and return minTop and maxBot
+    const samples = Math.max(4, Math.ceil((endX - startX) / 90));
+    let minTop = Infinity;
+    let maxBot = -Infinity;
+    for (let i = 0; i <= samples; i++) {
+      const x = startX + (i / samples) * (endX - startX);
+      const [yT, yB] = sampleTrackYWorld(x);
+      if (yT < minTop) minTop = yT;
+      if (yB > maxBot) maxBot = yB;
+    }
+    return { yTop: minTop, yBot: maxBot };
+  }
+
+  function sampleTrackYWorld(xWorld) {
+    const segs = track.segments;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const s0 = segs[i], s1 = segs[i + 1];
+      if (xWorld >= s0.x && xWorld <= s1.x) {
+        const t = (xWorld - s0.x) / (s1.x - s0.x);
+        return [lerp(s0.yTop, s1.yTop, t), lerp(s0.yBot, s1.yBot, t)];
+      }
+    }
+    const sLast = segs[segs.length - 1];
+    return [sLast.yTop, sLast.yBot];
+  }
+
+  // Controls: touch/mouse left/right halves set steerDir
+  function setInputHandlers() {
+    let active = false;
+    function start(x) {
+      active = true;
+      state.running = true;
+      hudMessage.style.opacity = 0;
+      state.steerDir = (x < vw/2) ? -1 : 1;
+    }
+    function move(x) { if (active) state.steerDir = (x < vw/2) ? -1 : 1; }
+    function end() { active = false; state.steerDir = 0; }
+
+    canvas.addEventListener('pointerdown', e => {
+      canvas.setPointerCapture(e.pointerId);
+      if (!state.running && state.meters === 0) {
+        // first start
+        start(e.clientX);
+      } else if (!state.running && state.meters > 0) {
+        // restart after crash
+        reset();
+        // immediately start steering on this side
+        start(e.clientX);
+      } else {
+        start(e.clientX);
+      }
+    });
+    canvas.addEventListener('pointermove', e => move(e.clientX));
+    canvas.addEventListener('pointerup', () => end());
+    canvas.addEventListener('pointercancel', () => end());
+
+    // Keyboard fallback: Up/Down arrows or W/S
+    window.addEventListener('keydown', e => {
+      if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft') {
+        if (!state.running && state.meters > 0) reset();
+        state.steerDir = -1; state.running = true; hudMessage.style.opacity = 0;
+      }
+      if (e.code === 'ArrowDown' || e.code === 'KeyS' || e.code === 'ArrowRight') {
+        if (!state.running && state.meters > 0) reset();
+        state.steerDir = 1; state.running = true; hudMessage.style.opacity = 0;
+      }
+    });
+    window.addEventListener('keyup', e => {
+      if (['ArrowUp','KeyW','ArrowDown','KeyS','ArrowLeft','ArrowRight'].includes(e.code)) state.steerDir = 0;
+    });
+  }
+  setInputHandlers();
+
+  function lerp(a,b,t){return a+(b-a)*t}
+  function clamp(v, a, b){return Math.max(a, Math.min(b, v));}
+
+  function sampleTrackY(xScreen) {
+    return sampleTrackYWorld(xScreen + track.scrollX);
+  }
+
+  function update(dt) {
+    // Scroll
+    if (state.running) {
+      // Increase scrolling speed gradually
+      track.speed += CONFIG.speedAccelPxPerSec2 * dt;
+      track.scrollX += track.speed * dt;
+      extendTrack();
+    }
+
+    // Car control → steer strength scales with speed (more speed = snappier)
+    const speedExcess = Math.max(0, track.speed - CONFIG.baseSpeedPxPerSec);
+    const speedUnits = speedExcess / 100; // per +100 px/s
+    const steerStrength = clamp(
+      CONFIG.steering.baseSteerStrength + CONFIG.steering.steerStrengthPer100Px * speedUnits,
+      0,
+      CONFIG.steering.maxSteerStrength
+    );
+    car.targetAngle = clamp(car.targetAngle + state.steerDir * steerStrength * dt, -0.8, 0.8);
+
+    // Drift model: velocity realigns toward the car's nose with grip
+    const speed = Math.hypot(car.vx, car.vy);
+    const headingVx = Math.cos(car.angle);
+    const headingVy = Math.sin(car.angle);
+
+    // Car tries to align its heading to targetAngle (steer feel)
+    const steerResponse = Math.min(
+      CONFIG.steering.baseResponse + CONFIG.steering.responsePer100Px * speedUnits,
+      CONFIG.steering.maxResponse
+    );
+    car.angle += (car.targetAngle - car.angle) * (1 - Math.exp(-steerResponse * dt));
+
+    // Propulsion keeps forward movement
+    const accelForward = 120; // px/s^2
+    car.vx += headingVx * accelForward * dt;
+    car.vy += headingVy * accelForward * dt;
+
+    // Compute components in car frame
+    const velAngle = Math.atan2(car.vy, car.vx);
+    let rel = velAngle - car.angle; // relative slip angle
+    rel = Math.atan2(Math.sin(rel), Math.cos(rel)); // wrap
+
+    let long = Math.cos(rel) * speed;
+    let lat = Math.sin(rel) * speed;
+
+    // Friction: stronger laterally than longitudinally
+    const longDamp = Math.exp(-CONFIG.drift.longFrictionPerSec * dt);
+    const latDamp = Math.exp(-CONFIG.drift.latFrictionPerSec * dt);
+    long = long * longDamp + CONFIG.drift.forwardGlide * dt; // slight glide
+    lat = lat * latDamp;
+
+    // Alignment grip: bleed lateral into longitudinal in direction of nose
+    let grip = CONFIG.drift.alignGripPerSec + CONFIG.drift.alignGripPer100Px * speedUnits;
+    if (state.steerDir !== 0) grip *= (1 + CONFIG.drift.extraGripWhenSteering);
+    grip = Math.min(grip, CONFIG.drift.maxAlignGrip);
+    const transfer = lat * (1 - Math.exp(-grip * dt));
+    long += Math.sign(long || 1) * Math.abs(transfer) * 0.6; // convert some sideways into forward
+    lat -= transfer;
+
+    // Rebuild velocity from components
+    const newSpeed = Math.hypot(long, lat);
+    const newRel = Math.atan2(lat, long);
+    const newVelAngle = car.angle + newRel;
+    car.vx = Math.cos(newVelAngle) * newSpeed;
+    car.vy = Math.sin(newVelAngle) * newSpeed;
+
+    // Integrate position
+    car.x += car.vx * dt;
+    car.y += car.vy * dt;
+
+    // Keep car approximately around one third width; world scroll simulates forward motion
+    // If car drifts too far right, apply soft constraint
+    const desiredX = vw * 0.35;
+    car.x += (desiredX - car.x) * (1 - Math.exp(-8 * dt));
+
+    // Collision: determine current region (floe or seam window) and stay within bounds
+    const worldX = car.x + track.scrollX;
+    const region = findCurrentRegion(worldX);
+    const tolerance = 10;
+    if (!region) {
+      if (state.running) { state.best = Math.max(state.best, state.meters); flashLose(); }
+      reset();
+      return;
+    }
+    const gapHeightForScore = region.data.yBotRect - region.data.yTopRect;
+    if (car.y < region.data.yTopRect - tolerance || car.y > region.data.yBotRect + tolerance) {
+      if (state.running) { state.best = Math.max(state.best, state.meters); flashLose(); }
+      reset();
+      return;
+    }
+
+    // Update meters only while running: 100 px ~= 1 m
+    if (state.running) {
+      const metersPerPx = 1/100;
+      state.meters += (track.speed * metersPerPx) * dt;
+      updateMeters();
+    }
+  }
+
+  function findCurrentRegion(worldX) {
+    for (let i = 0; i < track.floes.length; i++) {
+      const f = track.floes[i];
+      if (worldX >= f.startX && worldX <= f.endX) return { type: 'floe', data: f };
+      if (f.startX > worldX) break;
+    }
+    return null;
+  }
+
+  function flashLose() {
+    hudMessage.innerHTML = `You fell in! Best: ${Math.floor(state.best)}<br/>Tap left/right to try again`;
+    hudMessage.style.opacity = 1;
+    setTimeout(() => { hudMessage.style.opacity = 1; }, 0);
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, vw, vh);
+
+    // Sky/sea gradient
+    const grd = ctx.createLinearGradient(0, 0, 0, vh);
+    grd.addColorStop(0, '#072746');
+    grd.addColorStop(1, '#0a4e74');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, vw, vh);
+
+    // Draw water as layered wavy lines
+    const drawWaves = (spacing, amp, freqX, speed, alpha, color) => {
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      for (let y0 = -20; y0 <= vh + 20; y0 += spacing) {
+        ctx.beginPath();
+        for (let x = -40; x <= vw + 40; x += 16) {
+          const t = x * freqX + state.time * speed + y0 * 0.025;
+          const off = Math.sin(t * 2.1) * amp * 0.45 + Math.cos(t * 1.3) * amp * 0.25 + noise(t * 3.1) * amp * 0.3;
+          const y = y0 + off;
+          if (x === -40) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+    drawWaves(34, 29, 0.010, 0.35, 0.08, '#b7eaff');
+    drawWaves(52, 37, 0.007, 0.22, 0.06, '#9fdaf7');
+
+    // Draw long rectangular floes with rounded corners (textured if available)
+    for (let i = 0; i < track.floes.length; i++) {
+      const f = track.floes[i];
+      const x0 = f.startX - track.scrollX;
+      const x1 = f.endX - track.scrollX;
+      if (x1 < -2 || x0 > vw + 2) continue;
+      const w = x1 - x0;
+      const h = f.yBotRect - f.yTopRect;
+      const r = 12;
+      if (floeImgReady) {
+        ctx.save();
+        // clip to rounded rect, then draw image stretched
+        const rr = Math.min(r, w*0.5, h*0.5);
+        ctx.beginPath();
+        ctx.moveTo(x0+rr, f.yTopRect);
+        ctx.arcTo(x0+w, f.yTopRect, x0+w, f.yTopRect+h, rr);
+        ctx.arcTo(x0+w, f.yTopRect+h, x0, f.yTopRect+h, rr);
+        ctx.arcTo(x0, f.yTopRect+h, x0, f.yTopRect, rr);
+        ctx.arcTo(x0, f.yTopRect, x0+w, f.yTopRect, rr);
+        ctx.closePath();
+        ctx.clip();
+        // Crop padding area from the source to avoid visual shrink
+        const srcW = floeImg.naturalWidth || 1;
+        const srcH = floeImg.naturalHeight || 1;
+        const pad = CONFIG.floeSpritePaddingRatio;
+        const sx = Math.floor(srcW * pad);
+        const sy = Math.floor(srcH * pad);
+        const sw = Math.max(1, Math.floor(srcW * (1 - 2*pad)));
+        const sh = Math.max(1, Math.floor(srcH * (1 - 2*pad)));
+        ctx.drawImage(floeImg, sx, sy, sw, sh, x0, f.yTopRect, w, h);
+        ctx.restore();
+      } else {
+        roundedRect(ctx, x0, f.yTopRect, w, h, r, '#f7fdff');
+      }
+    }
+    // No extra connectors between floes; only back-to-back rectangles
+
+    // Draw car (sprite if available), with a slip shadow
+    ctx.save();
+    ctx.translate(car.x, car.y);
+    ctx.rotate(car.angle);
+    // Slip shadow based on lateral velocity
+    const lateralSlip = Math.sin(Math.atan2(car.vy, car.vx) - car.angle);
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 12 + Math.abs(lateralSlip)*14;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 6;
+    if (carImgReady) {
+      // The car sprite is oriented top-down (long side vertical). Rotate +90° so forward points right.
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(
+        carImg,
+        0,
+        0,
+        carImg.naturalWidth || 1,
+        carImg.naturalHeight || 1,
+        -car.width/2,
+        -car.length/2,
+        car.width,
+        car.length
+      );
+    } else {
+      // Fallback: vector car
+      roundedRect(ctx, -car.length/2, -car.width/2, car.length, car.width, 12, '#9fe3ff');
+      // wheels
+      ctx.fillStyle = 'rgba(20,30,40,0.9)';
+      const wheelW = car.length*0.16;
+      const wheelH = car.width*0.22;
+      const wheelOffsetX = car.length*0.28;
+      const wheelOffsetY = car.width*0.5 - wheelH*0.5;
+      ctx.fillRect(-wheelOffsetX - wheelW*0.5, -wheelOffsetY, wheelW, wheelH);
+      ctx.fillRect(-wheelOffsetX - wheelW*0.5, +wheelOffsetY - wheelH, wheelW, wheelH);
+      ctx.fillRect(+wheelOffsetX - wheelW*0.5, -wheelOffsetY, wheelW, wheelH);
+      ctx.fillRect(+wheelOffsetX - wheelW*0.5, +wheelOffsetY - wheelH, wheelW, wheelH);
+      // windshield
+      roundedRect(ctx, -car.length*0.35, -car.width*0.35, car.length*0.22, car.width*0.7, 6, 'rgba(0,0,0,0.25)');
+    }
+    ctx.restore();
+
+    // Hud subtle split hint
+    // Uncomment to show halves helper: document.body.classList.add('halves')
+  }
+
+  function roundedRect(ctx, x, y, w, h, r, fill) {
+    const rr = Math.min(r, w*0.5, h*0.5);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(1/30, (now - last) / 1000);
+    last = now;
+    state.time += dt;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  reset();
+  requestAnimationFrame(frame);
+})();
+
+
