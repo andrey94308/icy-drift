@@ -96,6 +96,7 @@
       responsePer100Px: 0.35,      // extra response per +100 px/s scroll
       maxSteerStrength: 4.0,       // cap for steer strength
       maxResponse: 10.0,           // cap for response
+      maxSteerAngleRad: 1.2,       // clamp for target steering angle (± radians)
     },
 
     // Drift/grip
@@ -456,7 +457,11 @@
       0,
       CONFIG.steering.maxSteerStrength
     );
-    car.targetAngle = clamp(car.targetAngle + state.steerDir * steerStrength * dt, -0.8, 0.8);
+    car.targetAngle = clamp(
+      car.targetAngle + state.steerDir * steerStrength * dt,
+      -CONFIG.steering.maxSteerAngleRad,
+      CONFIG.steering.maxSteerAngleRad
+    );
 
     // Drift model: velocity realigns toward the car's nose with grip
     const speed = Math.hypot(car.vx, car.vy);
