@@ -86,11 +86,11 @@
   const CONFIG = {
     // World scroll
     baseSpeedPxPerSec: 220,        // initial world scroll speed (px/s)
-    speedAccelPxPerSec2: 12,       // how fast the scroll speed grows (px/s^2)
+    speedAccelPxPerSec2: 8,       // how fast the scroll speed grows (px/s^2)
 
     // Steering feel
     steering: {
-      baseSteerStrength: 2,        // target angle change speed at base speed (rad/s)
+      baseSteerStrength: 1.5,        // target angle change speed at base speed (rad/s)
       steerStrengthPer100Px: 0.4,  // extra steer strength per +100 px/s scroll
       baseResponse: 6.0,           // how quickly the body turns toward target angle
       responsePer100Px: 0.35,      // extra response per +100 px/s scroll
@@ -103,8 +103,7 @@
     drift: {
       longFrictionPerSec: 0.5,     // longitudinal damping (along heading)
       latFrictionPerSec: 0.5,      // lateral damping (kills side slip)
-      forwardGlide: 50,            // constant forward glide (px/s) for smoothness
-      alignGripPerSec: 50,         // rate velocity aligns to nose (s^-1)
+      alignGripPerSec: 0,         // rate velocity aligns to nose (s^-1)
       alignGripPer100Px: 1.1,      // extra alignment per +100 px/s
       extraGripWhenSteering: 0.6,  // additional grip while steering held
       maxAlignGrip: 10.0,          // cap for alignment grip
@@ -114,7 +113,7 @@
     floeSpritePaddingRatio: -0.01, // trim empty borders on floe/shore sprites per side
 
     // Shore (starting slab)
-    shoreCoverRatio: 1.6,          // fraction of screen width covered by shore (0..1)
+    shoreCoverRatio: 0.6,          // fraction of screen width covered by shore (0..1)
     shoreVisualFadePx: 2,          // visual water stripe width at shore edge (px)
 
     // Floe spawning after shore
@@ -123,13 +122,13 @@
       floeHeightJitter: 0.25,      // ±% randomization of height
       floatWidthMain: 175,         // base floe width along X (px)
       floeWidthJitter: 0.25,       // ±% randomization of width
-      minIntersection: 60,         // min vertical separation between consecutive floes (px)
+      minIntersection: 70,         // min vertical separation between consecutive floes (px)
       intersectionJitter: 0.4      // +0..jitter of extra separation (fraction)
     },
 
     // Forward progress modulation (reduce scroll when turning)
     forwardMod: {
-      curveExponent: 0.2,    // curvature of 1→0 drop with angle (1=linear, >1 slower near 0, <1 faster)
+      curveExponent: 1,    // curvature of 1→0 drop with angle (1=linear, >1 slower near 0, <1 faster)
       smoothTimeSec: 0.6     // smoothing time constant for forward slowdown/speedup (sec)
     }
   };
@@ -515,7 +514,9 @@
     // Friction: stronger laterally than longitudinally
     const longDamp = Math.exp(-CONFIG.drift.longFrictionPerSec * dt);
     const latDamp = Math.exp(-CONFIG.drift.latFrictionPerSec * dt);
-    long = long * longDamp + CONFIG.drift.forwardGlide * dt; // slight glide
+    // Dynamic forward glide: when forwardFactor=1 (pointing right) → 0, at 90° → baseSpeedPxPerSec
+    const dynamicGlide = CONFIG.baseSpeedPxPerSec * (1 - (state.forwardFactorSmoothed ?? 1));
+    long = long * longDamp + dynamicGlide * dt;
     lat = lat * latDamp;
 
     // Alignment grip: bleed lateral into longitudinal in direction of nose
