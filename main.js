@@ -119,9 +119,9 @@
 
     // Floe spawning after shore
     floe: {
-      floatHeightMain: 150,        // base floe height (px)
+      floatHeightMain: 175,        // base floe height (px)
       floeHeightJitter: 0.25,      // ±% randomization of height
-      floatWidthMain: 150,         // base floe width along X (px)
+      floatWidthMain: 175,         // base floe width along X (px)
       floeWidthJitter: 0.25,       // ±% randomization of width
       minIntersection: 60,         // min vertical separation between consecutive floes (px)
       intersectionJitter: 0.4      // +0..jitter of extra separation (fraction)
