@@ -18,6 +18,8 @@ html, body {
   width: 100vw;
   height: 100vh;
   touch-action: none; /* prevent scroll/zoom on mobile while controlling */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #hud {

@@ -411,6 +411,9 @@
     canvas.addEventListener('pointerup', e => { e.preventDefault(); end(); });
     canvas.addEventListener('pointercancel', e => { e.preventDefault(); end(); });
 
+    // Extra iOS defense: prevent contextmenu on long press
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
     // Keyboard fallback: Up/Down arrows or W/S
     window.addEventListener('keydown', e => {
       if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'ArrowLeft') {
