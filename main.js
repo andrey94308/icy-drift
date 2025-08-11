@@ -95,14 +95,14 @@
       baseResponse: 6.0,           // how quickly the body turns toward target angle
       responsePer100Px: 0.35,      // extra response per +100 px/s scroll
       maxSteerStrength: 4.0,       // cap for steer strength
-      maxResponse: 10.0,           // cap for response
+      maxResponse: 15.0,           // cap for response
       maxSteerAngleRad: 1.2,       // clamp for target steering angle (± radians)
     },
 
     // Drift/grip
     drift: {
       longFrictionPerSec: 0.5,     // longitudinal damping (along heading)
-      latFrictionPerSec: 5,      // lateral damping (kills side slip)
+      latFrictionPerSec: 0.5,      // lateral damping (kills side slip)
       forwardGlide: 50,            // constant forward glide (px/s) for smoothness
       alignGripPerSec: 50,         // rate velocity aligns to nose (s^-1)
       alignGripPer100Px: 1.1,      // extra alignment per +100 px/s
