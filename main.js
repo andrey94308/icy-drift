@@ -121,17 +121,19 @@
     track.segments = [];
     track.speed = 220; // reset to base speed
     seedTrack();
-    // reset floes and pre-generate so they are visible before first click
-    track.floes = [];
-    track.nextFloeX = 0;
-    extendFloes();
 
+    // Place car first so we can spawn initial floe under it
     car.x = vw * 0.35;
     car.y = vh * 0.5;
     car.vx = 120;
     car.vy = 0;
     car.angle = 0;
     car.targetAngle = car.angle;
+
+    // reset floes and pre-generate so they are visible before first click
+    track.floes = [];
+    track.nextFloeX = 0;
+    extendFloes();
 
     hudMessage.style.opacity = 1;
     hideGameOver();
@@ -207,12 +209,12 @@
     // New spawning: constant-ish size with jitter and controlled vertical intersections
     const viewEnd = track.scrollX + vw + 300;
     if (track.floes.length === 0) {
-      // Spawn first floe centered under car
+      // Spawn first floe centered under the car (both X and Y)
       const width = jitterAround(CONFIG.floe.floatWidthMain, CONFIG.floe.floeWidthJitter);
       const height = jitterAround(CONFIG.floe.floatHeightMain, CONFIG.floe.floeHeightJitter);
-      const startX = track.nextFloeX = track.scrollX; // start at current scroll
+      const startX = track.nextFloeX = track.scrollX + car.x - width * 0.5; // place under car.x
       const endX = startX + width;
-      const center = vh * 0.5;
+      const center = car.y;
       const yTopRect = center - height * 0.5;
       const yBotRect = center + height * 0.5;
       track.floes.push({ startX, endX, yTopRect, yBotRect });
