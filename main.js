@@ -18,7 +18,7 @@
   // Tunables
   const CONFIG = {
     // Forward scroll acceleration (px/s^2). Increase to make game ramp up faster.
-    speedAccelPxPerSec2: 18,
+    speedAccelPxPerSec2: 12,
     baseSpeedPxPerSec: 220,
     steering: {
       baseSteerStrength: 1,     // rad/s at base speed
@@ -39,6 +39,15 @@
     },
     // Floe sprite padding crop (per-side). If your sprite has ~20% padding, set 0.2
     floeSpritePaddingRatio: -0.01,
+    // New floe spawning tunables
+    floe: {
+      floatHeightMain: 150,
+      floeHeightJitter: 0.25, // ±25%
+      floatWidthMain: 150,
+      floeWidthJitter: 0.25,  // ±25%
+      minIntersection: 40,    // vertical gap between consecutive floes
+      intersectionJitter: 0.4 // +0..20% randomness multiplier
+    }
   };
 
   const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -195,61 +204,65 @@
   }
 
   function extendFloes() {
-    // Ensure continuous tiling of long rectangular floes with no gaps
+    // New spawning: constant-ish size with jitter and controlled vertical intersections
     const viewEnd = track.scrollX + vw + 300;
     if (track.floes.length === 0) {
-      track.nextFloeX = track.segments.length ? track.segments[0].x : track.scrollX;
-    } else {
-      track.nextFloeX = Math.max(track.nextFloeX, track.floes[track.floes.length - 1].endX);
+      // Spawn first floe centered under car
+      const width = jitterAround(CONFIG.floe.floatWidthMain, CONFIG.floe.floeWidthJitter);
+      const height = jitterAround(CONFIG.floe.floatHeightMain, CONFIG.floe.floeHeightJitter);
+      const startX = track.nextFloeX = track.scrollX; // start at current scroll
+      const endX = startX + width;
+      const center = vh * 0.5;
+      const yTopRect = center - height * 0.5;
+      const yBotRect = center + height * 0.5;
+      track.floes.push({ startX, endX, yTopRect, yBotRect });
+      track.nextFloeX = endX;
     }
     while (track.nextFloeX < viewEnd) {
-      const len = rng.range(140, 260); // shorter floes
+      const prev = track.floes[track.floes.length - 1];
+      const width = jitterAround(CONFIG.floe.floatWidthMain, CONFIG.floe.floeWidthJitter);
+      const height = jitterAround(CONFIG.floe.floatHeightMain, CONFIG.floe.floeHeightJitter);
       const startX = track.nextFloeX;
-      const endX = startX + len;
-      const env = sampleBandEnvelope(startX, endX);
-      const bandHeight = Math.max(30, env.yBot - env.yTop);
+      const endX = startX + width;
 
-      const prev = track.floes[track.floes.length - 1] || null;
-      const targetOverlap = car.width + 12; // slightly above car width
-      const overlapTolerance = 3; // allow small slack
+      const jitterMul = 1 + Math.max(0, (rng.float() * CONFIG.floe.intersectionJitter));
+      const minI = CONFIG.floe.minIntersection * jitterMul;
 
-      // Fixed-like height with small jitter
-      const baseHeight = Math.min(track.gap, bandHeight) * track.floeHeightFactor;
-      const jitter = (rng.float()*2 - 1) * track.floeHeightJitter * baseHeight;
-      const chosenHeight = clamp(baseHeight + jitter, baseHeight*(1 - track.floeHeightJitter), baseHeight*(1 + track.floeHeightJitter));
-
-      // Compute final center by shifting up/down to achieve desired overlap, without changing height
-      let center;
-      const minCenter = env.yTop + chosenHeight * 0.5;
-      const maxCenter = env.yBot - chosenHeight * 0.5;
-      if (!prev) {
-        center = (minCenter + maxCenter) * 0.5;
+      let yTopRect, yBotRect;
+      // Decide direction: up (-1) or down (+1)
+      let dir = (rng.float() < 0.5) ? -1 : 1;
+      if (dir < 0) {
+        // up: set bottom of new = top of prev - minIntersection*
+        yBotRect = prev.yTopRect + minI;
+        yTopRect = yBotRect - height;
       } else {
-        const prevCenter = (prev.yTopRect + prev.yBotRect) * 0.5;
-        const prevHeight = prev.yBotRect - prev.yTopRect;
-        const reqDistance = (prevHeight + chosenHeight) * 0.5 - targetOverlap; // how far centers must be apart
-        const roomDown = Math.abs(prevCenter - minCenter);
-        const roomUp = Math.abs(maxCenter - prevCenter);
-        let dir = (rng.float() < 0.5) ? -1 : 1; // -1 up, +1 down relative to screen
-        // If random direction lacks room, flip
-        let maxRoom = dir < 0 ? roomDown : roomUp;
-        if (maxRoom < reqDistance - overlapTolerance) dir = (roomUp > roomDown) ? 1 : -1;
-        maxRoom = dir < 0 ? roomDown : roomUp;
-        // Distance we can actually move
-        const dist = clamp(reqDistance, 0, maxRoom);
-        center = prevCenter + (dir < 0 ? -dist : dist);
-        center = clamp(center, minCenter, maxCenter);
+        // down: set top of new = bottom of prev + minIntersection*
+        yTopRect = prev.yBotRect - minI;
+        yBotRect = yTopRect + height;
       }
-
-      const yTopRect = center - chosenHeight * 0.5;
-      const yBotRect = center + chosenHeight * 0.5;
+      // If goes outside screen, flip direction
+      if (yTopRect < -20 || yBotRect > vh + 20) {
+        dir *= -1;
+        if (dir < 0) {
+          yBotRect = prev.yTopRect + minI;
+          yTopRect = yBotRect - height;
+        } else {
+          yTopRect = prev.yBotRect - minI;
+          yBotRect = yTopRect + height;
+        }
+      }
       track.floes.push({ startX, endX, yTopRect, yBotRect });
-      track.nextFloeX = endX; // back-to-back
+      track.nextFloeX = endX;
     }
-    // Drop floes that are fully left of view
+    // Drop floes left of view
     while (track.floes.length && track.floes[0].endX < track.scrollX - 200) {
       track.floes.shift();
     }
+  }
+
+  function jitterAround(main, jitterRatio){
+    const j = (rng.float()*2 - 1) * jitterRatio;
+    return Math.max(4, main * (1 + j));
   }
 
   function sampleBandEnvelope(startX, endX) {
