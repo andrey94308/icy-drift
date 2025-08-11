@@ -21,7 +21,7 @@
     speedAccelPxPerSec2: 12,
     baseSpeedPxPerSec: 220,
     steering: {
-      baseSteerStrength: 1,     // rad/s at base speed
+      baseSteerStrength: 2,     // rad/s at base speed
       steerStrengthPer100Px: 0.2, // +rad/s per +100 px/s speed
       baseResponse: 4.0,          // nose rotation response at base speed
       responsePer100Px: 0.35,      // + per +100 px/s
@@ -45,7 +45,7 @@
       floeHeightJitter: 0.25, // ±25%
       floatWidthMain: 150,
       floeWidthJitter: 0.25,  // ±25%
-      minIntersection: 40,    // vertical gap between consecutive floes
+      minIntersection: 50,    // vertical gap between consecutive floes
       intersectionJitter: 0.4 // +0..20% randomness multiplier
     }
   };
@@ -209,12 +209,17 @@
     // New spawning: constant-ish size with jitter and controlled vertical intersections
     const viewEnd = track.scrollX + vw + 300;
     if (track.floes.length === 0) {
-      // Spawn first floe centered under the car (both X and Y)
+      // 1) Shore floe: cover left ~60% of the screen (full height)
+      const shoreStartX = track.scrollX - vw * 3; // extend far left to avoid seams
+      const shoreEndX = track.scrollX + vw * 0.6; // 60% of viewport width
+      track.floes.push({ startX: shoreStartX, endX: shoreEndX, yTopRect: 0, yBotRect: vh, isShore: true });
+
+      // 2) First discrete floe: start at mid-screen, vertically centered
       const width = jitterAround(CONFIG.floe.floatWidthMain, CONFIG.floe.floeWidthJitter);
       const height = jitterAround(CONFIG.floe.floatHeightMain, CONFIG.floe.floeHeightJitter);
-      const startX = track.nextFloeX = track.scrollX + car.x - width * 0.5; // place under car.x
+      const startX = track.scrollX + vw * 0.601;
       const endX = startX + width;
-      const center = car.y;
+      const center = vh * 0.5;
       const yTopRect = center - height * 0.5;
       const yBotRect = center + height * 0.5;
       track.floes.push({ startX, endX, yTopRect, yBotRect });
@@ -520,7 +525,11 @@
       const w = x1 - x0;
       const h = f.yBotRect - f.yTopRect;
       const r = 12;
-      if (floeImgReady) {
+      if (f.isShore) {
+        // Shore: simplest solid fill without texture/styling
+        ctx.fillStyle = '#f7fdff';
+        ctx.fillRect(x0, f.yTopRect, w, h);
+      } else if (floeImgReady) {
         ctx.save();
         // clip to rounded rect, then draw image stretched
         const rr = Math.min(r, w*0.5, h*0.5);
