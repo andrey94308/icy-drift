@@ -39,6 +39,9 @@
     },
     // Floe sprite padding crop (per-side). If your sprite has ~20% padding, set 0.2
     floeSpritePaddingRatio: -0.01,
+    // Shore params
+    shoreCoverRatio: 0.6,      // portion of screen width covered by the initial shore
+    shoreVisualFadePx: 2,     // purely visual transparent stripe at shore edge
     // New floe spawning tunables
     floe: {
       floatHeightMain: 150,
@@ -92,10 +95,11 @@
     freq: 0.0022, // x→time scale for band noise
     roughness: 0.25, // noise blend
     // Rectangular floes tiling along X with long lengths
-    floes: [], // { startX, endX, yTopRect, yBotRect }
+    floes: [], // { startX, endX, yTopRect, yBotRect, isShore? }
     nextFloeX: 0,
     floeHeightFactor: 0.7, // target fraction of band height/gap
     floeHeightJitter: 0.25, // ± jitter (25%)
+    shoreEdgeX: null,
   };
 
   // Car physics: drifting on ice. We'll simulate heading vs velocity angle with lateral slip.
@@ -211,13 +215,14 @@
     if (track.floes.length === 0) {
       // 1) Shore floe: cover left ~60% of the screen (full height)
       const shoreStartX = track.scrollX - vw * 3; // extend far left to avoid seams
-      const shoreEndX = track.scrollX + vw * 0.6; // 60% of viewport width
+      const shoreEndX = track.scrollX + vw * CONFIG.shoreCoverRatio; // exact 60%
       track.floes.push({ startX: shoreStartX, endX: shoreEndX, yTopRect: 0, yBotRect: vh, isShore: true });
+      track.shoreEdgeX = shoreEndX; // store world x of shore edge for rendering fade
 
       // 2) First discrete floe: start at mid-screen, vertically centered
       const width = jitterAround(CONFIG.floe.floatWidthMain, CONFIG.floe.floeWidthJitter);
       const height = jitterAround(CONFIG.floe.floatHeightMain, CONFIG.floe.floeHeightJitter);
-      const startX = track.scrollX + vw * 0.601;
+      const startX = shoreEndX; // physically contiguous; we will draw a visual fade
       const endX = startX + width;
       const center = vh * 0.5;
       const yTopRect = center - height * 0.5;
@@ -526,7 +531,7 @@
       const h = f.yBotRect - f.yTopRect;
       const r = 12;
       if (f.isShore) {
-        // Shore: simplest solid fill without texture/styling
+        // Shore: solid fill plus a thin transparent fade at the edge
         ctx.fillStyle = '#f7fdff';
         ctx.fillRect(x0, f.yTopRect, w, h);
       } else if (floeImgReady) {
@@ -556,6 +561,27 @@
       }
     }
     // No extra connectors between floes; only back-to-back rectangles
+
+    // Draw a visual water gap on top (purely cosmetic; physics remains continuous)
+    if (track.shoreEdgeX !== null && CONFIG.shoreVisualFadePx > 0) {
+      const gapX1 = track.shoreEdgeX - track.scrollX; // shore end (screen X)
+      const gapW = CONFIG.shoreVisualFadePx;
+      const gapX0 = gapX1 - gapW;
+      if (!(gapX1 < -2 || gapX0 > vw + 2)) {
+        const sea = ctx.createLinearGradient(0, 0, 0, vh);
+        sea.addColorStop(0, '#072746');
+        sea.addColorStop(1, '#0a4e74');
+        ctx.fillStyle = sea;
+        ctx.fillRect(gapX0, 0, gapW, vh);
+        // Optional thin edge highlight for readability
+        ctx.strokeStyle = 'rgba(190,220,255,0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(gapX0 + 0.5, 0); ctx.lineTo(gapX0 + 0.5, vh); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(gapX1 + 0.5, 0); ctx.lineTo(gapX1 + 0.5, vh); ctx.stroke();
+      }
+    }
 
     // Draw car (sprite if available), with a slip shadow
     ctx.save();
