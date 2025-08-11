@@ -15,6 +15,73 @@
   let carImgReady = false;
   carImg.onload = () => { carImgReady = true; };
 
+  const shoreImg = new Image();
+  shoreImg.src = 'shore.png';
+  let shoreImgReady = false;
+  shoreImg.onload = () => { shoreImgReady = true; };
+
+  // Procedural shore pattern (CSS-like look via canvas pattern)
+  let shoreTile = null; // {canvas, size}
+  function getShoreTile() {
+    if (shoreTile) return shoreTile;
+    const t = document.createElement('canvas');
+    const s = 128;
+    t.width = s; t.height = s;
+    const c = t.getContext('2d');
+    // base gradient
+    const g = c.createLinearGradient(0, 0, s, s);
+    g.addColorStop(0, '#f6fbff');
+    g.addColorStop(1, '#eaf6ff');
+    c.fillStyle = g;
+    c.fillRect(0, 0, s, s);
+    // soft veins/cracks
+    c.strokeStyle = 'rgba(115,155,190,0.15)';
+    c.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const x0 = Math.random()*s, y0 = Math.random()*s;
+      c.beginPath();
+      c.moveTo(x0, y0);
+      for (let k = 0; k < 3; k++) {
+        const x = Math.random()*s, y = Math.random()*s;
+        c.lineTo(x, y);
+      }
+      c.stroke();
+    }
+    // grain
+    const dots = 220;
+    for (let i = 0; i < dots; i++) {
+      c.fillStyle = `rgba(160,200,230,${0.05 + Math.random()*0.05})`;
+      const x = Math.random()*s, y = Math.random()*s;
+      c.fillRect(x, y, 1, 1);
+    }
+    shoreTile = { canvas: t, size: s };
+    return shoreTile;
+  }
+
+  function fillShorePattern(ctx, x, y, w, h) {
+    const { canvas: tile, size: s } = getShoreTile();
+    const pattern = ctx.createPattern(tile, 'repeat');
+    if (pattern && pattern.setTransform && typeof DOMMatrix === 'function') {
+      // Anchor pattern to world scroll so it moves with the world, not the screen
+      const dx = - (track.scrollX % s);
+      const dy = 0;
+      pattern.setTransform(new DOMMatrix().translate(dx, dy));
+      ctx.fillStyle = pattern;
+      ctx.fillRect(x, y, w, h);
+    } else {
+      // Fallback: clip and translate to align pattern
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+      const baseX = - (track.scrollX % s);
+      const baseY = 0;
+      const pattern2 = ctx.createPattern(tile, 'repeat');
+      ctx.fillStyle = pattern2;
+      ctx.translate(baseX, baseY);
+      ctx.fillRect(x - baseX, y - baseY, w + s*2, h + s*2);
+      ctx.restore();
+    }
+  }
+
   // Tunables
   const CONFIG = {
     // Forward scroll acceleration (px/s^2). Increase to make game ramp up faster.
@@ -531,9 +598,8 @@
       const h = f.yBotRect - f.yTopRect;
       const r = 12;
       if (f.isShore) {
-        // Shore: solid fill plus a thin transparent fade at the edge
-        ctx.fillStyle = '#f7fdff';
-        ctx.fillRect(x0, f.yTopRect, w, h);
+        // Shore: procedural pattern anchored to world, so it does not slide
+        fillShorePattern(ctx, x0, f.yTopRect, w, h);
       } else if (floeImgReady) {
         ctx.save();
         // clip to rounded rect, then draw image stretched
