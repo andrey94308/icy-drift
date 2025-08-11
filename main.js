@@ -92,7 +92,7 @@
     steering: {
       baseSteerStrength: 2,        // target angle change speed at base speed (rad/s)
       steerStrengthPer100Px: 0.2,  // extra steer strength per +100 px/s scroll
-      baseResponse: 4.0,           // how quickly the body turns toward target angle
+      baseResponse: 6.0,           // how quickly the body turns toward target angle
       responsePer100Px: 0.35,      // extra response per +100 px/s scroll
       maxSteerStrength: 4.0,       // cap for steer strength
       maxResponse: 10.0,           // cap for response
@@ -104,7 +104,7 @@
       longFrictionPerSec: 0.5,     // longitudinal damping (along heading)
       latFrictionPerSec: 0.5,      // lateral damping (kills side slip)
       forwardGlide: 40,            // constant forward glide (px/s) for smoothness
-      alignGripPerSec: 25,         // rate velocity aligns to nose (s^-1)
+      alignGripPerSec: 30,         // rate velocity aligns to nose (s^-1)
       alignGripPer100Px: 1.1,      // extra alignment per +100 px/s
       extraGripWhenSteering: 0.6,  // additional grip while steering held
       maxAlignGrip: 10.0,          // cap for alignment grip
@@ -123,7 +123,7 @@
       floeHeightJitter: 0.25,      // ±% randomization of height
       floatWidthMain: 150,         // base floe width along X (px)
       floeWidthJitter: 0.25,       // ±% randomization of width
-      minIntersection: 50,         // min vertical separation between consecutive floes (px)
+      minIntersection: 60,         // min vertical separation between consecutive floes (px)
       intersectionJitter: 0.4      // +0..jitter of extra separation (fraction)
     }
   };
