@@ -82,41 +82,48 @@
     }
   }
 
-  // Tunables
+  // Tunables (adjust to rebalance gameplay and visuals)
   const CONFIG = {
-    // Forward scroll acceleration (px/s^2). Increase to make game ramp up faster.
-    speedAccelPxPerSec2: 12,
-    baseSpeedPxPerSec: 220,
+    // World scroll
+    baseSpeedPxPerSec: 220,        // initial world scroll speed (px/s)
+    speedAccelPxPerSec2: 12,       // how fast the scroll speed grows (px/s^2)
+
+    // Steering feel
     steering: {
-      baseSteerStrength: 2,     // rad/s at base speed
-      steerStrengthPer100Px: 0.2, // +rad/s per +100 px/s speed
-      baseResponse: 4.0,          // nose rotation response at base speed
-      responsePer100Px: 0.35,      // + per +100 px/s
-      maxSteerStrength: 4.0,
-      maxResponse: 10.0,
+      baseSteerStrength: 2,        // target angle change speed at base speed (rad/s)
+      steerStrengthPer100Px: 0.2,  // extra steer strength per +100 px/s scroll
+      baseResponse: 4.0,           // how quickly the body turns toward target angle
+      responsePer100Px: 0.35,      // extra response per +100 px/s scroll
+      maxSteerStrength: 4.0,       // cap for steer strength
+      maxResponse: 10.0,           // cap for response
     },
+
+    // Drift/grip
     drift: {
-      longFrictionPerSec: 0.5,   // lower damping along heading
-      latFrictionPerSec: 0.5,    // higher damping sideways, car stops sliding sooner
-      forwardGlide: 40,          // small persistent push forward
-      alignGripPerSec: 25,      // how fast velocity aligns toward nose
-      alignGripPer100Px: 1.1,    // extra grip as speed grows (per +100 px/s)
-      extraGripWhenSteering: 0.6, // +60% grip while steering
-      maxAlignGrip: 10.0,
+      longFrictionPerSec: 0.5,     // longitudinal damping (along heading)
+      latFrictionPerSec: 0.5,      // lateral damping (kills side slip)
+      forwardGlide: 40,            // constant forward glide (px/s) for smoothness
+      alignGripPerSec: 25,         // rate velocity aligns to nose (s^-1)
+      alignGripPer100Px: 1.1,      // extra alignment per +100 px/s
+      extraGripWhenSteering: 0.6,  // additional grip while steering held
+      maxAlignGrip: 10.0,          // cap for alignment grip
     },
-    // Floe sprite padding crop (per-side). If your sprite has ~20% padding, set 0.2
-    floeSpritePaddingRatio: -0.01,
-    // Shore params
-    shoreCoverRatio: 0.6,      // portion of screen width covered by the initial shore
-    shoreVisualFadePx: 2,     // purely visual transparent stripe at shore edge
-    // New floe spawning tunables
+
+    // Sprite cropping
+    floeSpritePaddingRatio: -0.01, // trim empty borders on floe/shore sprites per side
+
+    // Shore (starting slab)
+    shoreCoverRatio: 0.6,          // fraction of screen width covered by shore (0..1)
+    shoreVisualFadePx: 2,          // visual water stripe width at shore edge (px)
+
+    // Floe spawning after shore
     floe: {
-      floatHeightMain: 150,
-      floeHeightJitter: 0.25, // ±25%
-      floatWidthMain: 150,
-      floeWidthJitter: 0.25,  // ±25%
-      minIntersection: 50,    // vertical gap between consecutive floes
-      intersectionJitter: 0.4 // +0..20% randomness multiplier
+      floatHeightMain: 150,        // base floe height (px)
+      floeHeightJitter: 0.25,      // ±% randomization of height
+      floatWidthMain: 150,         // base floe width along X (px)
+      floeWidthJitter: 0.25,       // ±% randomization of width
+      minIntersection: 50,         // min vertical separation between consecutive floes (px)
+      intersectionJitter: 0.4      // +0..jitter of extra separation (fraction)
     }
   };
 
