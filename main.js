@@ -91,12 +91,12 @@
     // Steering feel
     steering: {
       baseSteerStrength: 2,        // target angle change speed at base speed (rad/s)
-      steerStrengthPer100Px: 0.2,  // extra steer strength per +100 px/s scroll
+      steerStrengthPer100Px: 0.4,  // extra steer strength per +100 px/s scroll
       baseResponse: 6.0,           // how quickly the body turns toward target angle
       responsePer100Px: 0.35,      // extra response per +100 px/s scroll
-      maxSteerStrength: 4.0,       // cap for steer strength
+      maxSteerStrength: 6,       // cap for steer strength
       maxResponse: 15.0,           // cap for response
-      maxSteerAngleRad: 1.2,       // clamp for target steering angle (± radians)
+      maxSteerAngleRad: 1.6,       // clamp for target steering angle (± radians)
     },
 
     // Drift/grip
