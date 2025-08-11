@@ -393,6 +393,7 @@
     function end() { active = false; state.steerDir = 0; }
 
     canvas.addEventListener('pointerdown', e => {
+      e.preventDefault(); // avoid iOS zoom/loupe
       canvas.setPointerCapture(e.pointerId);
       if (!state.running && state.meters === 0) {
         // first start
@@ -406,9 +407,9 @@
         start(e.clientX);
       }
     });
-    canvas.addEventListener('pointermove', e => move(e.clientX));
-    canvas.addEventListener('pointerup', () => end());
-    canvas.addEventListener('pointercancel', () => end());
+    canvas.addEventListener('pointermove', e => { e.preventDefault(); move(e.clientX); });
+    canvas.addEventListener('pointerup', e => { e.preventDefault(); end(); });
+    canvas.addEventListener('pointercancel', e => { e.preventDefault(); end(); });
 
     // Keyboard fallback: Up/Down arrows or W/S
     window.addEventListener('keydown', e => {
