@@ -102,9 +102,9 @@
     // Drift/grip
     drift: {
       longFrictionPerSec: 0.5,     // longitudinal damping (along heading)
-      latFrictionPerSec: 0.5,      // lateral damping (kills side slip)
-      forwardGlide: 40,            // constant forward glide (px/s) for smoothness
-      alignGripPerSec: 30,         // rate velocity aligns to nose (s^-1)
+      latFrictionPerSec: 5,      // lateral damping (kills side slip)
+      forwardGlide: 50,            // constant forward glide (px/s) for smoothness
+      alignGripPerSec: 50,         // rate velocity aligns to nose (s^-1)
       alignGripPer100Px: 1.1,      // extra alignment per +100 px/s
       extraGripWhenSteering: 0.6,  // additional grip while steering held
       maxAlignGrip: 10.0,          // cap for alignment grip
