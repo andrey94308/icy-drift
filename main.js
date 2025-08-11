@@ -93,7 +93,7 @@
       baseSteerStrength: 2,        // target angle change speed at base speed (rad/s)
       steerStrengthPer100Px: 0.4,  // extra steer strength per +100 px/s scroll
       baseResponse: 2,           // how quickly the body turns toward target angle
-      responsePer100Px: 0.35,      // extra response per +100 px/s scroll
+      responsePer100Px: 0.1,      // extra response per +100 px/s scroll
       maxSteerStrength: 6,       // cap for steer strength
       maxResponse: 15.0,           // cap for response
       maxSteerAngleRad: 1.6,       // clamp for target steering angle (± radians)
