@@ -90,9 +90,9 @@
 
     // Steering feel
     steering: {
-      baseSteerStrength: 1.5,        // target angle change speed at base speed (rad/s)
+      baseSteerStrength: 2,        // target angle change speed at base speed (rad/s)
       steerStrengthPer100Px: 0.4,  // extra steer strength per +100 px/s scroll
-      baseResponse: 6.0,           // how quickly the body turns toward target angle
+      baseResponse: 2,           // how quickly the body turns toward target angle
       responsePer100Px: 0.35,      // extra response per +100 px/s scroll
       maxSteerStrength: 6,       // cap for steer strength
       maxResponse: 15.0,           // cap for response
@@ -194,6 +194,8 @@
     width: 46,
     length: 78,
     color: '#9fe3ff',
+    rearX: 0,
+    rearY: 0,
   };
 
   function reset() {
@@ -214,6 +216,9 @@
     car.vy = 0;
     car.angle = 0;
     car.targetAngle = car.angle;
+    // set rear axle position based on center
+    car.rearX = car.x - Math.cos(car.angle) * (car.length * 0.5);
+    car.rearY = car.y - Math.sin(car.angle) * (car.length * 0.5);
 
     // reset floes and pre-generate so they are visible before first click
     track.floes = [];
@@ -496,9 +501,12 @@
       CONFIG.steering.baseResponse + CONFIG.steering.responsePer100Px * speedUnits,
       CONFIG.steering.maxResponse
     );
-    car.angle += (car.targetAngle - car.angle) * (1 - Math.exp(-steerResponse * dt));
+    // Apply second-order smoothing for less harsh rotation
+    const angleError = Math.atan2(Math.sin(car.targetAngle - car.angle), Math.cos(car.targetAngle - car.angle));
+    const damping = 0.85; // 0..1, higher = more damping
+    car.angle += angleError * (1 - Math.exp(-steerResponse * dt)) * damping;
 
-    // Propulsion keeps forward movement along car's nose
+    // Propulsion keeps forward movement along car's nose (rear-wheel reference)
     const accelForward = 120; // px/s^2
     car.vx += headingVx * accelForward * dt;
     car.vy += headingVy * accelForward * dt;
@@ -527,21 +535,30 @@
     long += Math.sign(long || 1) * Math.abs(transfer) * 0.6; // convert some sideways into forward
     lat -= transfer;
 
-    // Rebuild velocity from components
+    // Rebuild velocity from components (these belong to rear axle)
     const newSpeed = Math.hypot(long, lat);
     const newRel = Math.atan2(lat, long);
     const newVelAngle = car.angle + newRel;
     car.vx = Math.cos(newVelAngle) * newSpeed;
     car.vy = Math.sin(newVelAngle) * newSpeed;
 
-    // Integrate position
-    car.x += car.vx * dt;
-    car.y += car.vy * dt;
+    // Integrate rear axle position, then reconstruct center from rear + half-length along nose
+    car.rearX += car.vx * dt;
+    car.rearY += car.vy * dt;
+    const halfL = car.length * 0.5;
+    const dirx = Math.cos(car.angle);
+    const diry = Math.sin(car.angle);
+    car.x = car.rearX + dirx * halfL;
+    car.y = car.rearY + diry * halfL;
 
     // Keep car approximately around one third width; world scroll simulates forward motion
     // If car drifts too far right, apply soft constraint
     const desiredX = vw * 0.35;
-    car.x += (desiredX - car.x) * (1 - Math.exp(-8 * dt));
+    const centerNudge = (desiredX - car.x) * (1 - Math.exp(-8 * dt));
+    // Apply nudge at rear so pivot behavior is preserved
+    car.rearX += centerNudge;
+    car.x = car.rearX + Math.cos(car.angle) * halfL;
+    car.y = car.rearY + Math.sin(car.angle) * halfL;
 
     // Collision: determine current region (floe or seam window) and stay within bounds
     const worldX = car.x + track.scrollX;
