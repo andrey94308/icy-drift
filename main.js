@@ -114,7 +114,7 @@
     floeSpritePaddingRatio: -0.01, // trim empty borders on floe/shore sprites per side
 
     // Shore (starting slab)
-    shoreCoverRatio: 0.6,          // fraction of screen width covered by shore (0..1)
+    shoreCoverRatio: 1.6,          // fraction of screen width covered by shore (0..1)
     shoreVisualFadePx: 2,          // visual water stripe width at shore edge (px)
 
     // Floe spawning after shore
@@ -125,6 +125,12 @@
       floeWidthJitter: 0.25,       // ±% randomization of width
       minIntersection: 60,         // min vertical separation between consecutive floes (px)
       intersectionJitter: 0.4      // +0..jitter of extra separation (fraction)
+    },
+
+    // Forward progress modulation (reduce scroll when turning)
+    forwardMod: {
+      curveExponent: 0.2,    // curvature of 1→0 drop with angle (1=linear, >1 slower near 0, <1 faster)
+      smoothTimeSec: 0.6     // smoothing time constant for forward slowdown/speedup (sec)
     }
   };
 
@@ -150,6 +156,7 @@
     best: 0,
     // Inputs
     steerDir: 0, // -1 up (left half), +1 down (right half)
+    forwardFactorSmoothed: 1,
   };
 
   const hudScore = document.getElementById('score');
@@ -447,9 +454,22 @@
   function update(dt) {
     // Scroll
     if (state.running) {
-      // Increase scrolling speed gradually
+      // Increase base scrolling speed gradually
       track.speed += CONFIG.speedAccelPxPerSec2 * dt;
-      track.scrollX += track.speed * dt;
+
+      // Compute forward factor based solely on nose angle relative to +X (smooth 1→0 from 0° to 90°)
+      const wrapped = Math.atan2(Math.sin(car.angle), Math.cos(car.angle)); // [-pi, pi]
+      const noseAbs = Math.abs(wrapped);
+      const angleRatio = Math.min(1, noseAbs / (Math.PI / 2)); // 0..1 (1 at 90°)
+      const exponent = Math.max(0.2, CONFIG.forwardMod.curveExponent || 1.0);
+      const angleFactor = Math.pow(1 - angleRatio, exponent); // 1 at 0°, 0 at 90°
+      const targetForward = Math.max(0, Math.min(1, angleFactor));
+      // Smooth the forward factor so stopping/starting is gradual
+      const tau = Math.max(0.05, CONFIG.forwardMod.smoothTimeSec);
+      const alpha = 1 - Math.exp(-dt / tau);
+      state.forwardFactorSmoothed = state.forwardFactorSmoothed + (targetForward - state.forwardFactorSmoothed) * alpha;
+
+      track.scrollX += (track.speed * state.forwardFactorSmoothed) * dt;
       extendTrack();
     }
 
@@ -479,7 +499,7 @@
     );
     car.angle += (car.targetAngle - car.angle) * (1 - Math.exp(-steerResponse * dt));
 
-    // Propulsion keeps forward movement
+    // Propulsion keeps forward movement along car's nose
     const accelForward = 120; // px/s^2
     car.vx += headingVx * accelForward * dt;
     car.vy += headingVy * accelForward * dt;
