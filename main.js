@@ -665,6 +665,15 @@ import { CONFIG } from './config.js';
     if (carImgReady) {
       // The car sprite is oriented top-down (long side vertical). Rotate +90° so forward points right.
       ctx.rotate(Math.PI / 2);
+      // Front wheels (under body)
+      const steerVisual = (car.targetAngle - car.angle) * 0.6; // proportional visuals
+      const wheelW = car.width * 0.22;
+      const wheelH = car.length * 0.16;
+      const axleY = -car.length/2 + car.length * 0.18; // move wheels closer to front bumper
+      const offsetX = car.width * 0.46 - wheelW * 0.6;
+      drawWheel(ctx, -offsetX, axleY, wheelW, wheelH, steerVisual, 'rgba(25,35,45,0.95)');
+      drawWheel(ctx,  offsetX, axleY, wheelW, wheelH, steerVisual, 'rgba(25,35,45,0.95)');
+      // Body on top to overlap wheels
       ctx.drawImage(
         carImg,
         0,
@@ -680,15 +689,17 @@ import { CONFIG } from './config.js';
       // Fallback: vector car
       roundedRect(ctx, -car.length/2, -car.width/2, car.length, car.width, 12, '#9fe3ff');
       // wheels
+      const wheelBodyW = car.length*0.16;
+      const wheelBodyH = car.width*0.22;
+      const wheelOffsetX = car.length*0.28; // push front/rear wheels further toward ends
+      const wheelOffsetY = car.width*0.5 - wheelBodyH*0.5;
       ctx.fillStyle = 'rgba(20,30,40,0.9)';
-      const wheelW = car.length*0.16;
-      const wheelH = car.width*0.22;
-      const wheelOffsetX = car.length*0.28;
-      const wheelOffsetY = car.width*0.5 - wheelH*0.5;
-      ctx.fillRect(-wheelOffsetX - wheelW*0.5, -wheelOffsetY, wheelW, wheelH);
-      ctx.fillRect(-wheelOffsetX - wheelW*0.5, +wheelOffsetY - wheelH, wheelW, wheelH);
-      ctx.fillRect(+wheelOffsetX - wheelW*0.5, -wheelOffsetY, wheelW, wheelH);
-      ctx.fillRect(+wheelOffsetX - wheelW*0.5, +wheelOffsetY - wheelH, wheelW, wheelH);
+      ctx.fillRect(-wheelOffsetX - wheelBodyW*0.5, -wheelOffsetY, wheelBodyW, wheelBodyH); // rear-left
+      ctx.fillRect(-wheelOffsetX - wheelBodyW*0.5, +wheelOffsetY - wheelBodyH, wheelBodyW, wheelBodyH); // rear-right
+      // front wheels with steer
+      const steerVisual = (car.targetAngle - car.angle) * 0.6;
+      drawWheel(ctx, +wheelOffsetX, -wheelOffsetY + wheelBodyH/2, wheelBodyW, wheelBodyH, steerVisual, 'rgba(20,30,40,0.95)');
+      drawWheel(ctx, +wheelOffsetX, +wheelOffsetY - wheelBodyH/2, wheelBodyW, wheelBodyH, steerVisual, 'rgba(20,30,40,0.95)');
       // windshield
       roundedRect(ctx, -car.length*0.35, -car.width*0.35, car.length*0.22, car.width*0.7, 6, 'rgba(0,0,0,0.25)');
     }
@@ -709,6 +720,15 @@ import { CONFIG } from './config.js';
     ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
+  }
+
+  function drawWheel(ctx, cx, cy, w, h, rotRad, color) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotRad);
+    const r = Math.min(w, h) * 0.18; // small rounded corners
+    roundedRect(ctx, -w/2, -h/2, w, h, r, color);
+    ctx.restore();
   }
 
   let last = performance.now();
