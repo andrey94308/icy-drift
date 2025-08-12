@@ -2,7 +2,7 @@
   export const CONFIG = {
     // World scroll
     baseSpeedPxPerSec: 220,        // initial world scroll speed (px/s)
-    speedAccelPxPerSec2: 4,       // how fast the scroll speed grows (px/s^2)
+    speedAccelPxPerSec2: 2,       // how fast the scroll speed grows (px/s^2)
 
     // Steering feel
     steering: {
